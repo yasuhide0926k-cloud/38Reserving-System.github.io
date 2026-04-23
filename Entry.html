@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文化祭 入場ゲート</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body { padding: 20px; background: #e3f2fd; text-align: center; }
+    #preview { width: 100%; max-width: 400px; border: 5px solid #2196f3; border-radius: 10px; background: #000; }
+    .status-badge { font-size: 1.5rem; padding: 20px; border-radius: 10px; margin: 15px 0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h3>🚪 入場ゲート</h3>
+  <div id="scanner-section">
+    <canvas id="preview"></canvas>
+    <p class="mt-2 text-muted">入場QRをスキャン</p>
+  </div>
+  <div id="result-area" style="display:none;" class="card shadow p-3">
+    <h4 id="display-hrno"></h4>
+    <p id="display-time" class="badge p-2 fs-6"></p>
+    <div id="display-status" class="status-badge"></div>
+    <div id="action-btn" style="display:none;">
+      <button class="btn btn-primary btn-lg w-100 p-4" onclick="entry()">入場を記録する</button>
+    </div>
+    <button class="btn btn-secondary mt-3" onclick="reset()">次の人をスキャン</button>
+  </div>
+
+  <script>
+    // ★★★ここにGASで発行したウェブアプリのURLを貼り付けてください★★★
+    const GAS_API_URL = "ここにGASのURLを貼り付ける";
+
+    let stream = null; const video = document.createElement("video");
+    const canvas = document.getElementById("preview").getContext("2d", {alpha:false});
+    let scanning = false; let lastTime = 0; let currentId = "";
+
+    async function start() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+        video.srcObject = stream; video.setAttribute("playsinline", true); video.play();
+        scanning = true; requestAnimationFrame(tick);
+      } catch(e) { alert("カメラ失敗: " + e.message); }
+    }
+    function stop() { scanning = false; if(stream) stream.getTracks().forEach(t => t.stop()); }
+
+    function tick(time) {
+      if(!scanning) return;
+      if(video.readyState === video.HAVE_ENOUGH_DATA) {
+        const c = document.getElementById("preview"); c.width = video.videoWidth*0.5; c.height = video.videoHeight*0.5;
+        canvas.drawImage(video, 0, 0, c.width, c.height);
+        if(time - lastTime > 300) {
+          lastTime = time; const img = canvas.getImageData(0,0,c.width,c.height);
+          const qr = jsQR(img.data, img.width, img.height);
+          if(qr && qr.data.trim().length > 5) {
+            stop(); currentId = qr.data.trim();
+            fetchTicketInfo(currentId);
+          }
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // GAS APIと通信する処理
+    async function fetchTicketInfo(id) {
+      try {
+        const res = await fetch(`${GAS_API_URL}?action=check&id=${id}`);
+        const result = await res.json();
+        if(result.success) show(result.data);
+        else { alert(result.message); reset(); }
+      } catch(e) { alert("通信エラー: " + e); reset(); }
+    }
+
+    async function entry() {
+      try {
+        const res = await fetch(`${GAS_API_URL}?action=entry&id=${currentId}`);
+        const result = await res.json();
+        alert(result.message); reset();
+      } catch(e) { alert("通信エラー: " + e); reset(); }
+    }
+
+    function show(res) {
+      document.getElementById('display-hrno').innerText = "HRNO: " + res.hrno;
+      const tBox = document.getElementById('display-time');
+      tBox.innerText = res.time + " (" + res.message + ")";
+      tBox.className = "badge p-2 fs-6 " + (res.timeStatus === "OK" ? "bg-success" : "bg-danger");
+      
+      const b = document.getElementById('display-status');
+      const actionBtn = document.getElementById('action-btn');
+      const isTimeOk = (res.timeStatus === "OK");
+
+      if (res.status === "支払い済み" && isTimeOk) {
+        b.innerText = "⭕ 入場OK"; b.className = "status-badge bg-success text-white";
+        actionBtn.style.display = "block";
+      } else if (res.status === "未払い") {
+        b.innerText = "🛑 未決済"; b.className = "status-badge bg-warning";
+        actionBtn.style.display = "none";
+      } else if (!isTimeOk) {
+        b.innerText = "❌ 時間外"; b.className = "status-badge bg-danger text-white";
+        actionBtn.style.display = "none";
+      } else {
+        b.innerText = "⚠️ 入場済み"; b.className = "status-badge bg-secondary text-white";
+        actionBtn.style.display = "none";
+      }
+      document.getElementById('scanner-section').style.display="none"; document.getElementById('result-area').style.display="block";
+    }
+    function reset() { document.getElementById('scanner-section').style.display="block"; document.getElementById('result-area').style.display="none"; start(); }
+    window.onload = start;
+  </script>
+</body>
+</html>
