@@ -30,7 +30,7 @@
 
   <script>
     // ★★★ここにGASで発行したウェブアプリのURLを貼り付けてください★★★
-    const GAS_API_URL = "ここにGASのURLを貼り付ける";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyFnt0erEzKGuWCoZlI6KmmUGBTfjNK6tlAEiICNqGIuCZB0P1BkuhGCLJWM0DN6OQ/exec";
 
     let stream = null; const video = document.createElement("video");
     const canvas = document.getElementById("preview").getContext("2d", {alpha:false});
@@ -91,16 +91,16 @@
       const isTimeOk = (res.timeStatus === "OK");
 
       if (res.status === "支払い済み" && isTimeOk) {
-        b.innerText = "⭕ 入場OK"; b.className = "status-badge bg-success text-white";
+        b.innerText = "入場OK"; b.className = "status-badge bg-success text-white";
         actionBtn.style.display = "block";
       } else if (res.status === "未払い") {
-        b.innerText = "🛑 未決済"; b.className = "status-badge bg-warning";
+        b.innerText = "未決済"; b.className = "status-badge bg-warning";
         actionBtn.style.display = "none";
       } else if (!isTimeOk) {
-        b.innerText = "❌ 時間外"; b.className = "status-badge bg-danger text-white";
+        b.innerText = "時間外"; b.className = "status-badge bg-danger text-white";
         actionBtn.style.display = "none";
       } else {
-        b.innerText = "⚠️ 入場済み"; b.className = "status-badge bg-secondary text-white";
+        b.innerText = "入場済み"; b.className = "status-badge bg-secondary text-white";
         actionBtn.style.display = "none";
       }
       document.getElementById('scanner-section').style.display="none"; document.getElementById('result-area').style.display="block";
