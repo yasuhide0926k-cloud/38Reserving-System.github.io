@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-  <h3>💰 レジ画面</h3>
+  <h3>レジ画面</h3>
   <div id="scanner-section">
     <canvas id="preview"></canvas>
     <p class="mt-2 text-muted">QRをスキャンしてください</p>
@@ -22,14 +22,14 @@
     <h4 id="display-hrno" class="text-primary"></h4>
     <div id="display-status" class="status-badge"></div>
     <div id="action-btn" style="display:none;">
-      <button class="btn btn-success btn-lg w-100 p-4" onclick="pay()">現金を領収して有効化</button>
+      <button class="btn btn-success btn-lg w-100 p-4" onclick="pay()">現金領収</button>
     </div>
-    <button class="btn btn-secondary mt-3" onclick="reset()">次の人をスキャン</button>
+    <button class="btn btn-secondary mt-3" onclick="reset()">次へ</button>
   </div>
 
   <script>
     // ★★★ここにGASで発行したウェブアプリのURLを貼り付けてください★★★
-    const GAS_API_URL = "ここにGASのURLを貼り付ける";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyFnt0erEzKGuWCoZlI6KmmUGBTfjNK6tlAEiICNqGIuCZB0P1BkuhGCLJWM0DN6OQ/exec";
 
     let stream = null; const video = document.createElement("video");
     const canvas = document.getElementById("preview").getContext("2d", {alpha:false});
@@ -82,7 +82,7 @@
     function show(res) {
       document.getElementById('display-hrno').innerText = "HRNO: " + res.hrno;
       const b = document.getElementById('display-status');
-      b.innerText = (res.status === "未払い") ? "💸 未払い" : "✅ 支払い済み";
+      b.innerText = (res.status === "未払い") ? "未払い" : "支払い済み";
       b.className = "status-badge " + (res.status === "未払い" ? "bg-warning" : "bg-success text-white");
       document.getElementById('action-btn').style.display = (res.status === "未払い") ? "block" : "none";
       document.getElementById('scanner-section').style.display="none"; document.getElementById('result-area').style.display="block";
