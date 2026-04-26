@@ -3,75 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>入場ゲート | 文化祭</title>
+  <title>入場ゲート</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <style>
-    body { padding: 20px; background: #e3f2fd; text-align: center; }
-    #reader { width: 100%; max-width: 400px; margin: 0 auto; border: 5px solid #2196f3; border-radius: 10px; background: #000; overflow: hidden; }
-    .status-badge { font-size: 1.5rem; padding: 20px; border-radius: 10px; margin: 15px 0; font-weight: bold; }
-  </style>
 </head>
-<body>
-  <h3>🚪 入場ゲートα</h3>
-  <div id="scanner-section">
-    <div id="reader"></div>
-    <p class="mt-3 text-muted">QRをスキャンしてください</p>
-  </div>
+<body class="bg-light text-center p-3">
+  <h3>🚪 入場ゲート</h3>
+  <div id="reader" class="mx-auto shadow rounded" style="width:100%; max-width:400px; background:#000;"></div>
 
-  <div id="result-area" style="display:none;" class="card shadow p-4">
+  <div id="result-area" style="display:none;" class="card shadow mt-3 p-4">
     <h2 id="display-hrno" class="fw-bold"></h2>
-    <div class="mb-3"><span id="display-time" class="badge p-2 fs-6"></span></div>
-    <div id="display-status" class="status-badge"></div>
-    <div id="action-btn-container" style="display:none;">
-      <button class="btn btn-primary btn-lg w-100 p-4 mb-3" id="entry-btn" onclick="executeEntry()">入場を記録する</button>
+    <div id="display-status" class="alert mt-2"></div>
+    <div id="action-btn-area" style="display:none;">
+      <button class="btn btn-primary btn-lg w-100 p-4" id="entry-btn" onclick="executeEntry()">入場を記録する</button>
     </div>
-    <button class="btn btn-outline-secondary w-100" onclick="resetScanner()">次の人をスキャン</button>
+    <button class="btn btn-secondary mt-3 w-100" onclick="resetScanner()">次をスキャン</button>
   </div>
 
   <script>
-    // ★あなたのURLに間違いがないか再確認してください★
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyFnt0erEzKGuWCoZlI6KmmUGBTfjNK6tlAEiICNqGIuCZB0P1BkuhGCLJWM0DN6OQ/exec";
-    
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbyIaFnigkHG9mxCEEIYIcdbGA1Z_kMF_4KPpk1zAPZp2qZx12yeqEQxa82ORh3HGXYw/exec";
     let html5QrCode;
-    let isProcessing = false;
     let currentId = "";
 
-    async function startScanner() {
+    function startScanner() {
       html5QrCode = new Html5Qrcode("reader");
-      try {
-        await html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
-      } catch (err) { console.error(err); }
+      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (id) => {
+        currentId = id.trim();
+        html5QrCode.stop().then(() => fetchInfo(currentId));
+      });
     }
 
-    async function onScanSuccess(decodedText) {
-      if (isProcessing) return;
-      isProcessing = true;
-      currentId = decodedText.trim();
-      if (currentId.length > 5) {
-        if (navigator.vibrate) navigator.vibrate(200);
-        try { await html5QrCode.stop(); } catch(e) {}
-        fetchTicketInfo(currentId);
-      } else { isProcessing = false; }
-    }
-
-    // 通信エラーを回避する最もシンプルなFetch
-    async function fetchTicketInfo(id) {
-      const url = `${GAS_API_URL}?action=check&id=${id}&t=${new Date().getTime()}`;
-      
+    async function fetchInfo(id) {
       try {
-        // オプションを一切指定しないのが、GASとブラウザの通信では最も安全です
-        const res = await fetch(url);
-        
-        if (!res.ok) throw new Error("Network response was not ok");
-        
-        const result = await res.json();
-        
-        if(result.success) showResult(result.data);
-        else { alert(result.message); resetScanner(); }
-      } catch(e) {
-        console.error("Fetch Error:", e);
-        alert("通信失敗: Failed to fetch\n理由: ネットワークが不安定か、ブラウザの保護機能に拒否されました。Wi-Fiを切って4G/5Gにすると直る場合があります。");
+        const res = await fetch(`${GAS_URL}?action=check&id=${id}`);
+        const text = await res.text(); // TEXTとして受け取る
+        const result = JSON.parse(text); // JSONに変換
+
+        if (!result.success) { alert(result.message); return resetScanner(); }
+
+        const data = result.data;
+        document.getElementById('display-hrno').innerText = "HR: " + data.hrno;
+        const s = document.getElementById('display-status');
+        const btnArea = document.getElementById('action-btn-area');
+
+        if (data.status === "支払い済み" && data.timeStatus === "OK") {
+          s.innerText = "⭕ 入場許可"; s.className = "alert alert-success fs-4";
+          btnArea.style.display = "block";
+        } else {
+          s.innerText = "❌ 入場不可 (" + (data.status === "未払い" ? "未決済" : "使用済み/時間外") + ")";
+          s.className = "alert alert-danger fs-4";
+          btnArea.style.display = "none";
+        }
+        document.getElementById('result-area').style.display = "block";
+      } catch (e) {
+        alert("通信エラー: " + e.message);
         resetScanner();
       }
     }
@@ -79,44 +64,17 @@
     async function executeEntry() {
       const btn = document.getElementById('entry-btn');
       btn.disabled = true; btn.innerText = "送信中...";
-      const url = `${GAS_API_URL}?action=entry&id=${currentId}&t=${new Date().getTime()}`;
       try {
-        const res = await fetch(url);
-        const result = await res.json();
+        const res = await fetch(`${GAS_URL}?action=entry&id=${currentId}`);
+        const text = await res.text();
+        const result = JSON.parse(text);
         alert(result.message);
         resetScanner();
-      } catch(e) { alert("エラー: " + e.message); resetScanner(); }
-    }
-
-    function showResult(data) {
-      document.getElementById('display-hrno').innerText = "HR: " + data.hrno;
-      const tBox = document.getElementById('display-time');
-      tBox.innerText = data.time + " (" + data.message + ")";
-      tBox.className = "badge p-2 fs-6 " + (data.timeStatus === "OK" ? "bg-success" : "bg-danger");
-      
-      const b = document.getElementById('display-status');
-      const actionArea = document.getElementById('action-btn-container');
-      
-      if (data.status === "支払い済み" && data.timeStatus === "OK") {
-        b.innerText = "⭕ 入場OK"; b.className = "status-badge bg-success text-white";
-        actionArea.style.display = "block";
-      } else if (data.status === "未払い") {
-        b.innerText = "🛑 未決済"; b.className = "status-badge bg-warning text-dark";
-        actionArea.style.display = "none";
-      } else {
-        b.innerText = "❌ 入場不可"; b.className = "status-badge bg-danger text-white";
-        actionArea.style.display = "none";
-      }
-      document.getElementById('scanner-section').style.display = "none";
-      document.getElementById('result-area').style.display = "block";
+      } catch (e) { alert("エラー"); resetScanner(); }
     }
 
     function resetScanner() {
-      isProcessing = false;
-      document.getElementById('scanner-section').style.display = "block";
       document.getElementById('result-area').style.display = "none";
-      document.getElementById('entry-btn').disabled = false;
-      document.getElementById('entry-btn').innerText = "入場を記録する";
       startScanner();
     }
     window.onload = startScanner;
