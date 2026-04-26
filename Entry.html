@@ -11,14 +11,34 @@
   <h3>🚪 入場ゲート</h3>
   <div id="reader" class="mx-auto shadow rounded" style="width:100%; max-width:400px; background:#000;"></div>
 
-  <div id="result-area" style="display:none;" class="card shadow mt-3 p-4">
-    <h2 id="display-hrno" class="fw-bold"></h2>
-    <div id="display-status" class="alert mt-2"></div>
-    <div id="action-btn-area" style="display:none;">
-      <button class="btn btn-primary btn-lg w-100 p-4" id="entry-btn" onclick="executeEntry()">入場を記録する</button>
-    </div>
-    <button class="btn btn-secondary mt-3 w-100" onclick="resetScanner()">次をスキャン</button>
+ <div id="result-area" style="display:none;" class="card shadow mt-3 p-4">
+  <h2 id="display-hrno" class="fw-bold"></h2>
+  
+  <div class="my-3 p-3 border border-danger rounded bg-white">
+    <span class="fs-5">合計人数</span><br>
+    <span id="display-count" class="display-3 fw-bold text-danger"></span><span class="fs-2"> 名</span>
   </div>
+
+  <div id="display-status" class="alert mt-2"></div>
+  <div id="action-btn-area" style="display:none;">
+    <button class="btn btn-primary btn-lg w-100 p-4 fw-bold" id="entry-btn" onclick="executeEntry()">入場処理</button>
+  </div>
+  <button class="btn btn-secondary mt-3 w-100" onclick="resetScanner()">次をスキャン</button>
+</div>
+
+<script>
+// fetchInfo関数の修正箇所
+async function fetchInfo(id) {
+  // ... (中略) ...
+  const result = JSON.parse(text);
+  if(result.success) {
+    const data = result.data;
+    document.getElementById('display-hrno').innerText = data.hrno;
+    document.getElementById('display-count').innerText = data.count; // 人数をセット
+    // ... (以下ステータス判定) ...
+  }
+}
+</script>
 
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIaFnigkHG9mxCEEIYIcdbGA1Z_kMF_4KPpk1zAPZp2qZx12yeqEQxa82ORh3HGXYw/exec";
