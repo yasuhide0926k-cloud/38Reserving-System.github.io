@@ -82,7 +82,28 @@
         const res = await fetch(url);
         if (!res.ok) throw new Error("サーバー応答エラー");
         
-        const result = await res.json();
+        const result = await fetch(url, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-cache'
+    });
+
+    if (!res.ok) throw new Error("ネットワーク応答が異常です");
+
+    // 一旦テキストとして受け取る
+    const text = await res.text();
+    // テキストを無理やりJSONデータとして解釈する
+    const result = JSON.parse(text);
+    
+    if(result.success) show(result.data);
+    else { alert(result.message); reset(); }
+  } catch(e) { 
+    // ここで具体的なエラー内容を表示させる
+    console.error(e);
+    alert("通信失敗: " + e.message + "\n※iPhoneの場合はSafari設定の「サイト越えトラッキングを防ぐ」をOFFにしてみてください。"); 
+    reset(); 
+  }
+}
         
         if(result.success) show(result.data);
         else { alert(result.message); reset(); }
