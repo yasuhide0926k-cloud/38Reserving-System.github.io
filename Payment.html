@@ -5,91 +5,134 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>文化祭 レジ画面</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://unpkg.com/qr-scanner/qr-scanner.umd.min.js"></script>
   <style>
     body { padding: 20px; background: #fff3e0; text-align: center; }
-    #preview { width: 100%; max-width: 400px; border: 5px solid #ff9800; border-radius: 10px; background: #000; }
+    /* qr-scannerが自動で作る枠のためのスタイル */
+    #scanner-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border: 5px solid #ff9800; border-radius: 10px; background: #000; overflow: hidden; }
+    video { width: 100%; height: auto; display: block; }
     .status-badge { font-size: 1.5rem; padding: 20px; border-radius: 10px; margin: 15px 0; font-weight: bold; }
   </style>
 </head>
 <body>
   <h3>レジ画面</h3>
+  
   <div id="scanner-section">
-    <canvas id="preview"></canvas>
-    <p class="mt-2 text-muted">QRをスキャンしてください</p>
+    <div id="scanner-container">
+      <video id="qr-video"></video>
+    </div>
+    <p class="mt-2 text-muted">QRを枠内に映してください</p>
   </div>
+
   <div id="result-area" style="display:none;" class="card shadow p-3">
     <h4 id="display-hrno" class="text-primary"></h4>
     <div id="display-status" class="status-badge"></div>
     <div id="action-btn" style="display:none;">
-      <button class="btn btn-success btn-lg w-100 p-4" onclick="pay()">現金領収</button>
+      <button class="btn btn-success btn-lg w-100 p-4" id="pay-btn" onclick="pay()">入場料を領収</button>
     </div>
-    <button class="btn btn-secondary mt-3" onclick="reset()">次へ</button>
+    <button class="btn btn-secondary mt-3" onclick="reset()">次の人をスキャン</button>
   </div>
 
   <script>
     // ★★★ここにGASで発行したウェブアプリのURLを貼り付けてください★★★
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyFnt0erEzKGuWCoZlI6KmmUGBTfjNK6tlAEiICNqGIuCZB0P1BkuhGCLJWM0DN6OQ/exec";
 
-    let stream = null; const video = document.createElement("video");
-    const canvas = document.getElementById("preview").getContext("2d", {alpha:false});
-    let scanning = false; let lastTime = 0; let currentId = "";
+    const videoElem = document.getElementById('qr-video');
+    let qrScanner;
+    let isProcessing = false; // 多重通信を防ぐための強力なロック
+    let currentId = "";
 
-    async function start() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-        video.srcObject = stream; video.setAttribute("playsinline", true); video.play();
-        scanning = true; requestAnimationFrame(tick);
-      } catch(e) { alert("カメラ起動失敗: " + e.message); }
-    }
-    function stop() { scanning = false; if(stream) stream.getTracks().forEach(t => t.stop()); }
-
-    function tick(time) {
-      if(!scanning) return;
-      if(video.readyState === video.HAVE_ENOUGH_DATA) {
-        const c = document.getElementById("preview"); c.width = video.videoWidth*0.5; c.height = video.videoHeight*0.5;
-        canvas.drawImage(video, 0, 0, c.width, c.height);
-        if(time - lastTime > 300) {
-          lastTime = time; const img = canvas.getImageData(0,0,c.width,c.height);
-          const qr = jsQR(img.data, img.width, img.height, {inversionAttempts:"dontInvert"});
-          if(qr && qr.data.trim().length > 5) {
-            stop(); currentId = qr.data.trim();
-            fetchTicketInfo(currentId);
-          }
+    // 1. スキャナーの初期設定
+    qrScanner = new QrScanner(
+      videoElem,
+      result => {
+        // ロックがかかっている時（通信中）は何もしない
+        if (isProcessing) return;
+        
+        const id = result.data.trim();
+        if (id.length > 5) {
+          isProcessing = true; // ロックをかける
+          qrScanner.stop(); // 読み取った瞬間にカメラを物理停止
+          if (navigator.vibrate) navigator.vibrate(200); // 振動でお知らせ
+          
+          currentId = id;
+          fetchTicketInfo(id);
         }
+      },
+      { 
+        returnDetailedScanResult: true,
+        highlightScanRegion: true, // 読み取り枠を表示してユーザビリティ向上
+        highlightCodeOutline: true
       }
-      requestAnimationFrame(tick);
-    }
+    );
 
-    // GAS APIと通信する処理
+    // 画面ロード時にカメラ起動
+    window.onload = () => {
+      qrScanner.start().catch(e => alert("カメラ起動失敗: " + e));
+    };
+
+    // 2. 通信処理（キャッシュ対策 ＆ エラー表示強化）
     async function fetchTicketInfo(id) {
       try {
-        const res = await fetch(`${GAS_API_URL}?action=check&id=${id}`);
+        // URLの末尾に時刻をつけてキャッシュを無効化（常に最新のデータをGASから取る）
+        const url = `${GAS_API_URL}?action=check&id=${id}&t=${new Date().getTime()}`;
+        const res = await fetch(url);
+        
+        if (!res.ok) throw new Error("サーバー応答エラー (" + res.status + ")");
+        
         const result = await res.json();
-        if(result.success) show(result.data);
-        else { alert(result.message); reset(); }
-      } catch(e) { alert("通信エラー: " + e); reset(); }
+        
+        if(result.success) {
+          show(result.data);
+        } else {
+          alert(result.message);
+          reset();
+        }
+      } catch(e) { 
+        alert("通信エラーが発生しました: " + e.message + "\n電波状況を確認してください。"); 
+        reset(); 
+      }
     }
 
     async function pay() {
+      const btn = document.getElementById('pay-btn');
+      btn.disabled = true; // ボタン連打防止
+      btn.innerText = "処理中...";
+
       try {
-        const res = await fetch(`${GAS_API_URL}?action=pay&id=${currentId}`);
+        const url = `${GAS_API_URL}?action=pay&id=${currentId}&t=${new Date().getTime()}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("サーバーエラー");
+        
         const result = await res.json();
-        alert(result.message); reset();
-      } catch(e) { alert("通信エラー: " + e); reset(); }
+        alert(result.message);
+        reset();
+      } catch(e) { 
+        alert("通信エラー: " + e.message); 
+        reset(); 
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "入場料領収";
+      }
     }
 
     function show(res) {
       document.getElementById('display-hrno').innerText = "HRNO: " + res.hrno;
       const b = document.getElementById('display-status');
       b.innerText = (res.status === "未払い") ? "未払い" : "支払い済み";
-      b.className = "status-badge " + (res.status === "未払い" ? "bg-warning" : "bg-success text-white");
+      b.className = "status-badge " + (res.status === "未払い" ? "bg-warning text-dark" : "bg-success text-white");
       document.getElementById('action-btn').style.display = (res.status === "未払い") ? "block" : "none";
-      document.getElementById('scanner-section').style.display="none"; document.getElementById('result-area').style.display="block";
+      
+      document.getElementById('scanner-section').style.display = "none"; 
+      document.getElementById('result-area').style.display = "block";
     }
 
-    function reset() { document.getElementById('scanner-section').style.display="block"; document.getElementById('result-area').style.display="none"; start(); }
-    window.onload = start;
+    function reset() { 
+      isProcessing = false; // ロック解除
+      document.getElementById('scanner-section').style.display = "block"; 
+      document.getElementById('result-area').style.display = "none"; 
+      qrScanner.start(); // カメラ再開
+    }
   </script>
 </body>
 </html>
