@@ -1,0 +1,95 @@
+<script>
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbyIaFnigkHG9mxCEEIYIcdbGA1Z_kMF_4KPpk1zAPZp2qZx12yeqEQxa82ORh3HGXYw/exec";
+  let html5QrCode;
+  let currentId = "";
+
+  function startScanner() {
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      (id) => {
+        currentId = id.trim();
+        html5QrCode.stop().then(() => fetchInfo(currentId));
+      }
+    );
+  }
+
+  async function fetchInfo(id) {
+    try {
+      const res = await fetch(`${GAS_URL}?action=check&id=${id}`);
+      const text = await res.text();
+      const result = JSON.parse(text);
+
+      if (!result.success) {
+        alert(result.message);
+        return resetScanner();
+      }
+
+      const data = result.data;
+
+      // HR番号
+      document.getElementById('display-hrno').innerText =
+        "HR: " + data.hrno;
+
+      // 予約人数
+      document.getElementById('display-count').innerText =
+        data.count;
+
+      const s = document.getElementById('display-status');
+      const btnArea = document.getElementById('action-btn-area');
+
+      if (data.status === "支払い済み" && data.timeStatus === "OK") {
+
+        s.innerText = "⭕ 入場許可";
+        s.className = "alert alert-success fs-4";
+        btnArea.style.display = "block";
+
+      } else {
+
+        s.innerText =
+          "❌ 入場不可 (" +
+          (data.status === "未払い"
+            ? "未決済"
+            : "使用済み/時間外") +
+          ")";
+
+        s.className = "alert alert-danger fs-4";
+        btnArea.style.display = "none";
+      }
+
+      document.getElementById('result-area').style.display = "block";
+
+    } catch (e) {
+      alert("通信エラー: " + e.message);
+      resetScanner();
+    }
+  }
+
+  async function executeEntry() {
+    const btn = document.getElementById('entry-btn');
+
+    btn.disabled = true;
+    btn.innerText = "送信中...";
+
+    try {
+      const res = await fetch(`${GAS_URL}?action=entry&id=${currentId}`);
+      const text = await res.text();
+      const result = JSON.parse(text);
+
+      alert(result.message);
+      resetScanner();
+
+    } catch (e) {
+      alert("エラー");
+      resetScanner();
+    }
+  }
+
+  function resetScanner() {
+    document.getElementById('result-area').style.display = "none";
+    startScanner();
+  }
+
+  window.onload = startScanner;
+</script>
