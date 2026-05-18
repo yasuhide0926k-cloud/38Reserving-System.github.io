@@ -16,7 +16,7 @@
     
     <div class="my-3 p-3 border border-danger rounded bg-white">
       <span class="fs-5 text-muted">合計人数</span><br>
-      <span id="display-count" class="display-3 fw-bold text-danger">--</span><span class="fs-2 text-danger"> 名</span>
+      <span id="display-count" class="display-3 fw-bold text-danger">読込中</span><span class="fs-2 text-danger"> 名</span>
     </div>
 
     <div id="display-status" class="alert mt-2"></div>
@@ -27,12 +27,10 @@
   </div>
 
   <script>
-    // 指定いただいたGASのURLを埋め込み済みです
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIaFnigkHG9mxCEEIYIcdbGA1Z_kMF_4KPpk1zAPZp2qZx12yeqEQxa82ORh3HGXYw/exec";
     let html5QrCode;
     let currentId = "";
 
-    // スキャナー起動
     function startScanner() {
       html5QrCode = new Html5Qrcode("reader");
       html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (id) => {
@@ -41,10 +39,8 @@
       });
     }
 
-    // チケット情報の取得と判定
     async function fetchInfo(id) {
       try {
-        // Android/Pixelの通信エラー防止のため、末尾にタイムスタンプ「&t=...」を付与
         const res = await fetch(`${GAS_URL}?action=check&id=${id}&t=${new Date().getTime()}`);
         const text = await res.text(); 
         const result = JSON.parse(text); 
@@ -55,31 +51,39 @@
         }
 
         const data = result.data;
-        document.getElementById('display-hrno').innerText = "HR: " + data.hrno;
         
-        // 【改良点】GASから届いた人数をセット（万が一空っぽなら「1」を表示）
-        document.getElementById('display-count').innerText = data.count || "1";
+        // --- 【超重要】人数の徹底安全チェック＆デバッグ表示 ---
+        let finalCount = "1"; // 出発点は1名にする
+        let debugMessage = "";
 
+        if (data && data.count !== undefined && data.count !== null) {
+          finalCount = String(data.count).trim();
+          if (finalCount === "" || finalCount === "0") {
+            finalCount = "1";
+          }
+        } else {
+          // もしGASから人数が届いていなければ、画面のクラス名の後ろに警告を出す
+          debugMessage = "⚠️GAS更新忘れていませんか？";
+        }
+
+        // 画面への表示実行
+        document.getElementById('display-hrno').innerText = "HR: " + data.hrno + " " + debugMessage;
+        document.getElementById('display-count').innerText = finalCount;
+
+        // --- 以下、入場判定 ---
         const s = document.getElementById('display-status');
         const btnArea = document.getElementById('action-btn-area');
 
-        // 入場可否の判定ロジック
         if (data.status === "支払い済み" && data.timeStatus === "OK") {
           s.innerText = "⭕ 入場許可"; 
           s.className = "alert alert-success fs-4 fw-bold";
           btnArea.style.display = "block";
         } else {
-          // 原因を細かく特定して画面に表示（受付の負担を減らすため）
           let reason = "入場不可";
-          if (data.status === "未払い") {
-            reason = "未決済";
-          } else if (data.status === "入場済み") {
-            reason = "既に入場済み";
-          } else if (data.timeStatus === "BEFORE") {
-            reason = "予約時間前";
-          } else if (data.timeStatus === "AFTER") {
-            reason = "予約時間切れ";
-          }
+          if (data.status === "未払い") reason = "未決済";
+          else if (data.status === "入場済み") reason = "既に入場済み";
+          else if (data.timeStatus === "BEFORE") reason = "予約時間前";
+          else if (data.timeStatus === "AFTER") reason = "予約時間切れ";
           
           s.innerText = "❌ " + reason; 
           s.className = "alert alert-danger fs-4 fw-bold";
@@ -87,29 +91,22 @@
         }
         document.getElementById('result-area').style.display = "block";
       } catch (e) {
-        alert("通信エラー: " + e.message + "\n端末のモバイルデータ通信（4G/5G）への切り替えを試してください。");
+        alert("通信エラー: " + e.message);
         resetScanner();
       }
     }
 
-    // 入場確定の送信処理
     async function executeEntry() {
       const btn = document.getElementById('entry-btn');
-      btn.disabled = true; 
-      btn.innerText = "送信中...";
+      btn.disabled = true; btn.innerText = "送信中...";
       try {
         const res = await fetch(`${GAS_URL}?action=entry&id=${currentId}`);
         const text = await res.text();
-        const result = JSON.parse(text);
-        alert(result.message);
+        alert(JSON.parse(text).message);
         resetScanner();
-      } catch (e) { 
-        alert("入場処理の送信に失敗しました。"); 
-        resetScanner(); 
-      }
+      } catch (e) { alert("エラー"); resetScanner(); }
     }
 
-    // スキャナーのリセット
     function resetScanner() {
       document.getElementById('result-area').style.display = "none";
       document.getElementById('entry-btn').disabled = false;
