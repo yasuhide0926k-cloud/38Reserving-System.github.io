@@ -8,11 +8,11 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="bg-light text-center p-3">
-  <h3>🚪 入場ゲート</h3>
+  <h3 class="my-3 fw-bold">🚪 入場ゲート</h3>
   <div id="reader" class="mx-auto shadow rounded" style="width:100%; max-width:400px; background:#000;"></div>
 
   <div id="result-area" style="display:none;" class="card shadow mt-3 p-4">
-    <h2 id="display-hrno" class="fw-bold"></h2>
+    <h2 id="display-ticket-type" class="fw-bold text-primary"></h2>
     
     <div class="my-3 p-3 border border-danger rounded bg-white">
       <span class="fs-5 text-muted">合計人数</span><br>
@@ -20,8 +20,9 @@
     </div>
 
     <div id="display-status" class="alert mt-2"></div>
+    
     <div id="action-btn-area" style="display:none;">
-      <button class="btn btn-primary btn-lg w-100 p-4 fw-bold" id="entry-btn" onclick="executeEntry()">入場処理</button>
+      <button class="btn btn-primary btn-lg w-100 p-4 fw-bold fs-3" id="entry-btn" onclick="executeEntry()">入場処理確定</button>
     </div>
     <button class="btn btn-secondary mt-3 w-100" onclick="resetScanner()">次をスキャン</button>
   </div>
@@ -52,41 +53,41 @@
 
         const data = result.data;
         
-        // --- 【超重要】人数の徹底安全チェック＆デバッグ表示 ---
-        let finalCount = "1"; // 出発点は1名にする
-        let debugMessage = "";
-
-        if (data && data.count !== undefined && data.count !== null) {
-          finalCount = String(data.count).trim();
-          if (finalCount === "" || finalCount === "0") {
-            finalCount = "1";
-          }
+        // 1. 券種の表示切替
+        const typeEl = document.getElementById('display-ticket-type');
+        if (data.hrno === "予約者") {
+          typeEl.innerText = "🎫 事前予約枠 (" + (data.time || "") + ")";
+          typeEl.className = "fw-bold text-primary";
         } else {
-          // もしGASから人数が届いていなければ、画面のクラス名の後ろに警告を出す
-          debugMessage = "⚠️GAS更新忘れていませんか？";
+          typeEl.innerText = "👥 当日一般枠";
+          typeEl.className = "fw-bold text-success";
         }
 
-        // 画面への表示実行
-        document.getElementById('display-hrno').innerText = "HR: " + data.hrno + " " + debugMessage;
+        // 2. 人数チェック
+        let finalCount = "1";
+        if (data && data.count !== undefined && data.count !== null) {
+          finalCount = String(data.count).trim();
+          if (finalCount === "" || finalCount === "0") finalCount = "1";
+        }
         document.getElementById('display-count').innerText = finalCount;
 
-        // --- 以下、入場判定 ---
+        // 3. 入場可否の判定判定
         const s = document.getElementById('display-status');
         const btnArea = document.getElementById('action-btn-area');
 
         if (data.status === "支払い済み" && data.timeStatus === "OK") {
           s.innerText = "⭕ 入場許可"; 
-          s.className = "alert alert-success fs-4 fw-bold";
+          s.className = "alert alert-success fs-4 fw-bold py-3";
           btnArea.style.display = "block";
         } else {
           let reason = "入場不可";
-          if (data.status === "未払い") reason = "未決済";
-          else if (data.status === "入場済み") reason = "既に入場済み";
-          else if (data.timeStatus === "BEFORE") reason = "予約時間前";
-          else if (data.timeStatus === "AFTER") reason = "予約時間切れ";
+          if (data.status === "未払い") reason = "未決済 (レジへ誘導してください)";
+          else if (data.status === "入場済み") reason = "既に使用済みのチケット";
+          else if (data.timeStatus === "BEFORE") reason = "予約時間前です";
+          else if (data.timeStatus === "AFTER") reason = "予約時間が過ぎています";
           
           s.innerText = "❌ " + reason; 
-          s.className = "alert alert-danger fs-4 fw-bold";
+          s.className = "alert alert-danger fs-4 fw-bold py-3";
           btnArea.style.display = "none";
         }
         document.getElementById('result-area').style.display = "block";
@@ -104,13 +105,13 @@
         const text = await res.text();
         alert(JSON.parse(text).message);
         resetScanner();
-      } catch (e) { alert("エラー"); resetScanner(); }
+      } catch (e) { alert("エラーが発生しました"); resetScanner(); }
     }
 
     function resetScanner() {
       document.getElementById('result-area').style.display = "none";
       document.getElementById('entry-btn').disabled = false;
-      document.getElementById('entry-btn').innerText = "入場処理";
+      document.getElementById('entry-btn').innerText = "入場処理確定";
       startScanner();
     }
 
